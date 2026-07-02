@@ -1,17 +1,144 @@
-# HTML
-# Archive your static HTML project and save it with the build record.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
 trigger:
 - main
 
 pool:
-  vmImage: ubuntu-latest
+  vmImage: 'ubuntu-latest'
+
+variables:
+  azureServiceConnection: 'YOUR-SERVICE-CONNECTION'
+
+  resourceGroup: 'MovieWebsite-RG'
+  location: 'Central India'
+
+  vmName: 'MovieVM'
+  vmSize: 'Standard_B1s'
+  adminUser: 'azureuser'
+  image: 'Ubuntu2204'
 
 steps:
-- task: ArchiveFiles@2
+
+#--------------------------------------------------------
+# Checkout Source Code
+#--------------------------------------------------------
+
+- checkout: self
+
+#--------------------------------------------------------
+# Create Resource Group
+#--------------------------------------------------------
+
+- task: AzureCLI@2
+  displayName: 'Create Resource Group'
   inputs:
-    rootFolderOrFile: '$(build.sourcesDirectory)'
-    includeRootFolder: false
-- task: PublishBuildArtifacts@1
+    azureSubscription: $(azureServiceConnection)
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+
+      az group create \
+        --name $(resourceGroup) \
+        --location "$(location)"
+
+#--------------------------------------------------------
+# Create Virtual Machine
+#--------------------------------------------------------
+
+- task: AzureCLI@2
+  displayName: 'Create Ubuntu VM'
+  inputs:
+    azureSubscription: $(azureServiceConnection)
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+
+      az vm create \
+        --resource-group $(resourceGroup) \
+        --name $(vmName) \
+        --image $(image) \
+        --size $(vmSize) \
+        --admin-username $(adminUser) \
+        --generate-ssh-keys
+
+#--------------------------------------------------------
+# Open HTTP and SSH Ports
+#--------------------------------------------------------
+
+- task: AzureCLI@2
+  displayName: 'Open Required Ports'
+  inputs:
+    azureSubscription: $(azureServiceConnection)
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+
+      az vm open-port \
+        --resource-group $(resourceGroup) \
+        --name $(vmName) \
+        --port 80
+
+      az vm open-port \
+        --resource-group $(resourceGroup) \
+        --name $(vmName) \
+        --port 22
+
+#--------------------------------------------------------
+# Copy Website Files
+#--------------------------------------------------------
+
+- task: CopyFilesOverSSH@0
+  displayName: 'Copy Website to VM'
+  inputs:
+    sshEndpoint: 'YOUR-SSH-SERVICE-CONNECTION'
+    sourceFolder: '$(Build.SourcesDirectory)'
+    contents: '**'
+    targetFolder: '/home/azureuser'
+
+#--------------------------------------------------------
+# Install NGINX and Deploy Website
+#--------------------------------------------------------
+
+- task: SSH@0
+  displayName: 'Install NGINX and Deploy Website'
+  inputs:
+    sshEndpoint: 'YOUR-SSH-SERVICE-CONNECTION'
+    runOptions: inline
+    inline: |
+
+      sudo apt-get update
+
+      sudo apt-get install nginx -y
+
+      sudo rm -f /var/www/html/index.nginx-debian.html
+
+      sudo cp -r /home/azureuser/* /var/www/html/
+
+      sudo chown -R www-data:www-data /var/www/html
+
+      sudo chmod -R 755 /var/www/html
+
+      sudo systemctl restart nginx
+
+      sudo systemctl enable nginx
+
+      echo "Deployment Successful"
+
+#--------------------------------------------------------
+# Display Public IP
+#--------------------------------------------------------
+
+- task: AzureCLI@2
+  displayName: 'Show Public IP'
+  inputs:
+    azureSubscription: $(azureServiceConnection)
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+
+      echo "Website URL:"
+
+      az vm show \
+        --resource-group $(resourceGroup) \
+        --name $(vmName) \
+        -d \
+        --query publicIps \
+        -o tsv
