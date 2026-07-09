@@ -1,144 +1,42 @@
-trigger:
-- main
+trigger: none
 
 pool:
-  vmImage: 'ubuntu-latest'
-
-variables:
-  azureServiceConnection: 'YOUR-SERVICE-CONNECTION'
-
-  resourceGroup: 'MovieWebsite-RG'
-  location: 'Central India'
-
-  vmName: 'MovieVM'
-  vmSize: 'Standard_B1s'
-  adminUser: 'azureuser'
-  image: 'Ubuntu2204'
+  name: Remote
 
 steps:
-
-#--------------------------------------------------------
-# Checkout Source Code
-#--------------------------------------------------------
-
 - checkout: self
 
-#--------------------------------------------------------
-# Create Resource Group
-#--------------------------------------------------------
+- powershell: |
+    Write-Host "========================================"
+    Write-Host "Azure DevOps Self-Hosted Agent Test"
+    Write-Host "========================================"
 
-- task: AzureCLI@2
-  displayName: 'Create Resource Group'
-  inputs:
-    azureSubscription: $(azureServiceConnection)
-    scriptType: bash
-    scriptLocation: inlineScript
-    inlineScript: |
+    Write-Host "Computer Name : $env:COMPUTERNAME"
+    Write-Host "User Name     : $env:USERNAME"
+    Write-Host "Current Date  : $(Get-Date)"
+    Write-Host "Agent Name    : $env:AGENT_NAME"
+    Write-Host "Agent Machine : $env:AGENT_MACHINENAME"
 
-      az group create \
-        --name $(resourceGroup) \
-        --location "$(location)"
+    Write-Host ""
+    Write-Host "Current Directory"
+    Get-Location
 
-#--------------------------------------------------------
-# Create Virtual Machine
-#--------------------------------------------------------
+    Write-Host ""
+    Write-Host "Files in C:\"
+    Get-ChildItem C:\
 
-- task: AzureCLI@2
-  displayName: 'Create Ubuntu VM'
-  inputs:
-    azureSubscription: $(azureServiceConnection)
-    scriptType: bash
-    scriptLocation: inlineScript
-    inlineScript: |
+    Write-Host ""
+    Write-Host "Checking IIS Service"
+    Get-Service W3SVC
 
-      az vm create \
-        --resource-group $(resourceGroup) \
-        --name $(vmName) \
-        --image $(image) \
-        --size $(vmSize) \
-        --admin-username $(adminUser) \
-        --generate-ssh-keys
+    Write-Host ""
+    Write-Host "Disk Information"
+    Get-PSDrive
 
-#--------------------------------------------------------
-# Open HTTP and SSH Ports
-#--------------------------------------------------------
+    Write-Host ""
+    Write-Host "Environment Variables"
+    Get-ChildItem Env:
 
-- task: AzureCLI@2
-  displayName: 'Open Required Ports'
-  inputs:
-    azureSubscription: $(azureServiceConnection)
-    scriptType: bash
-    scriptLocation: inlineScript
-    inlineScript: |
-
-      az vm open-port \
-        --resource-group $(resourceGroup) \
-        --name $(vmName) \
-        --port 80
-
-      az vm open-port \
-        --resource-group $(resourceGroup) \
-        --name $(vmName) \
-        --port 22
-
-#--------------------------------------------------------
-# Copy Website Files
-#--------------------------------------------------------
-
-- task: CopyFilesOverSSH@0
-  displayName: 'Copy Website to VM'
-  inputs:
-    sshEndpoint: 'YOUR-SSH-SERVICE-CONNECTION'
-    sourceFolder: '$(Build.SourcesDirectory)'
-    contents: '**'
-    targetFolder: '/home/azureuser'
-
-#--------------------------------------------------------
-# Install NGINX and Deploy Website
-#--------------------------------------------------------
-
-- task: SSH@0
-  displayName: 'Install NGINX and Deploy Website'
-  inputs:
-    sshEndpoint: 'YOUR-SSH-SERVICE-CONNECTION'
-    runOptions: inline
-    inline: |
-
-      sudo apt-get update
-
-      sudo apt-get install nginx -y
-
-      sudo rm -f /var/www/html/index.nginx-debian.html
-
-      sudo cp -r /home/azureuser/* /var/www/html/
-
-      sudo chown -R www-data:www-data /var/www/html
-
-      sudo chmod -R 755 /var/www/html
-
-      sudo systemctl restart nginx
-
-      sudo systemctl enable nginx
-
-      echo "Deployment Successful"
-
-#--------------------------------------------------------
-# Display Public IP
-#--------------------------------------------------------
-
-- task: AzureCLI@2
-  displayName: 'Show Public IP'
-  inputs:
-    azureSubscription: $(azureServiceConnection)
-    scriptType: bash
-    scriptLocation: inlineScript
-    inlineScript: |
-
-      echo "Website URL:"
-
-      az vm show \
-        --resource-group $(resourceGroup) \
-        --name $(vmName) \
-        -d \
-        --query publicIps \
-        -o tsv
+    Write-Host ""
+    Write-Host "Test Completed Successfully"
+  displayName: 'Test Self-Hosted Agent'
