@@ -1,71 +1,113 @@
 trigger:
-  - main
+- main
 
 pool:
   name: Media Playwright
 
+variables:
+  composeFile: docker-compose.yml
+  serviceName: playwright
+
 steps:
 
-  # Clean previous Docker resources
-  - script: |
-      echo "Stopping and removing old containers..."
-      docker compose down --rmi all --volumes --remove-orphans || true
+# Checkout
+- checkout: self
 
-      echo "Removing old Playwright image..."
-      docker rmi -f playwright-tests || true
+#---------------------------------------------------------
+# Cleanup Previous Docker Resources
+#---------------------------------------------------------
+- task: CmdLine@2
+  displayName: 'Cleanup Previous Docker Resources'
+  continueOnError: true
+  inputs:
+    script: |
+      echo ===== Cleanup Started =====
 
-      echo "Cleaning Docker..."
-      docker system prune -af --volumes || true
+      docker compose -f $(composeFile) down --remove-orphans
 
-      echo "Cleaning old reports..."
-      rm -rf playwright-report
-      rm -rf test-results
+      docker system prune -f
 
-      mkdir -p playwright-report
-      mkdir -p test-results
-    displayName: "Cleanup"
+      if exist playwright-report rmdir /S /Q playwright-report
 
-  # Build fresh image
-  - script: |
-      docker compose build --no-cache
-    displayName: "Build Docker Image"
+      if exist test-results rmdir /S /Q test-results
 
-  # Start the container
-  - script: |
-      docker compose up -d
-    displayName: "Run Playwright Container"
+      echo Cleanup Completed
 
-  # Wait until the container exits (Playwright finishes)
-  - script: |
-      docker wait playwright-container
-    displayName: "Wait for Tests"
-    condition: always()
+#---------------------------------------------------------
+# Build Fresh Docker Image
+#---------------------------------------------------------
+- task: CmdLine@2
+  displayName: 'Build Docker Image'
+  inputs:
+    script: |
+      docker compose -f $(composeFile) build --no-cache
 
-  # Show logs
-  - script: |
-      docker logs playwright-container
-    displayName: "Container Logs"
-    condition: always()
+#---------------------------------------------------------
+# Start Playwright Container
+#---------------------------------------------------------
+- task: CmdLine@2
+  displayName: 'Start Playwright Container'
+  inputs:
+    script: |
+      docker compose -f $(composeFile) up -d
 
-  # Publish the Playwright report
-  - task: PublishPipelineArtifact@1
-    displayName: "Publish Playwright Report"
-    condition: always()
-    inputs:
-      targetPath: "$(Build.SourcesDirectory)/playwright-report"
-      artifact: "PlaywrightReport"
+#---------------------------------------------------------
+# Wait Until Playwright Finishes
+#---------------------------------------------------------
+- task: CmdLine@2
+  displayName: 'Wait For Tests'
+  inputs:
+    script: |
+      for /f %%i in ('docker compose -f $(composeFile) ps -q $(serviceName)') do (
+          docker wait %%i
+      )
 
-  # Publish test results folder
-  - task: PublishPipelineArtifact@1
-    displayName: "Publish Test Results"
-    condition: always()
-    inputs:
-      targetPath: "$(Build.SourcesDirectory)/test-results"
-      artifact: "TestResults"
+#---------------------------------------------------------
+# Show Logs
+#---------------------------------------------------------
+- task: CmdLine@2
+  displayName: 'Container Logs'
+  condition: always()
+  inputs:
+    script: |
+      docker compose -f $(composeFile) logs
 
-  # Final cleanup
-  - script: |
-      docker compose down --rmi all --volumes --remove-orphans || true
-      docker system prune -af --volumes || true
-    displayName: "Final Cleanup"
-    condition: always()
+#---------------------------------------------------------
+# Publish Playwright Report
+#---------------------------------------------------------
+- task: PublishPipelineArtifact@1
+  displayName: 'Publish Playwright Report'
+  condition: always()
+  inputs:
+    targetPath: 'playwright-report'
+    artifact: 'PlaywrightReport'
+
+#---------------------------------------------------------
+# Publish Test Results
+#---------------------------------------------------------
+- task: PublishTestResults@2
+  displayName: 'Publish Test Results'
+  condition: always()
+  inputs:
+    testResultsFormat: 'JUnit'
+    testResultsFiles: 'test-results/*.xml'
+    failTaskOnFailedTests: false
+
+#---------------------------------------------------------
+# Final Cleanup
+#---------------------------------------------------------
+- task: CmdLine@2
+  displayName: 'Final Cleanup'
+  condition: always()
+  continueOnError: true
+  inputs:
+    script: |
+      docker compose -f $(composeFile) down --remove-orphans
+
+      docker image prune -f
+
+      docker container prune -f
+
+      docker volume prune -f
+
+      echo Cleanup Finished
