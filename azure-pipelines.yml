@@ -6,66 +6,63 @@ pool:
 
 steps:
 
-  # Clean previous Docker resources
-  - script: |
-      echo "Stopping and removing old containers..."
-      docker compose down --rmi all --volumes --remove-orphans || true
+# Cleanup previous Docker resources
+- script: |
+    echo "Stopping and removing old containers..."
+    docker compose -f $(Build.SourcesDirectory)/docker-compose.yml down --rmi all --volumes --remove-orphans || true
 
-      echo "Removing old Playwright image..."
-      docker rmi -f playwright-tests || true
+    echo "Removing old Playwright image..."
+    docker rmi -f playwright-tests || true
 
-      echo "Cleaning Docker..."
-      docker system prune -af --volumes || true
+    echo "Cleaning Docker..."
+    docker system prune -af --volumes || true
 
-      echo "Cleaning old reports..."
-      rm -rf playwright-report
-      rm -rf test-results
+    echo "Cleaning old reports..."
+    rm -rf $(Build.SourcesDirectory)/playwright-report
+    rm -rf $(Build.SourcesDirectory)/test-results
 
-      mkdir -p playwright-report
-      mkdir -p test-results
-    displayName: "Cleanup"
+    mkdir -p $(Build.SourcesDirectory)/playwright-report
+    mkdir -p $(Build.SourcesDirectory)/test-results
+  displayName: "Cleanup"
 
-  # Build fresh image
-  # - script: |
-  #     docker compose build --no-cache
-  #   displayName: "Build Docker Image"
 
-  # Start the container
-  - script: |
-      docker compose up -d
-    displayName: "Run Playwright Container"
+# Start Playwright container
+- script: |
+    echo "Starting Playwright container..."
+    docker compose -f $(Build.SourcesDirectory)/docker-compose.yml up -d
+  displayName: "Run Playwright Container"
 
-  # Wait until the container exits (Playwright finishes)
-  - script: |
-      docker wait playwright-container
-    displayName: "Wait for Tests"
-    condition: always()
+# Wait until Playwright container finishes
+- script: |
+    docker wait playwright-container
+  displayName: "Wait for Tests"
+  condition: always()
 
-  # Show logs
-  - script: |
-      docker logs playwright-container
-    displayName: "Container Logs"
-    condition: always()
+# Show container logs
+- script: |
+    docker logs playwright-container
+  displayName: "Container Logs"
+  condition: always()
 
-  # Publish the Playwright report
-  - task: PublishPipelineArtifact@1
-    displayName: "Publish Playwright Report"
-    condition: always()
-    inputs:
-      targetPath: "$(Build.SourcesDirectory)/playwright-report"
-      artifact: "PlaywrightReport"
+# Publish Playwright HTML Report
+- task: PublishPipelineArtifact@1
+  displayName: "Publish Playwright Report"
+  condition: always()
+  inputs:
+    targetPath: "$(Build.SourcesDirectory)/playwright-report"
+    artifact: "PlaywrightReport"
 
-  # Publish test results folder
-  - task: PublishPipelineArtifact@1
-    displayName: "Publish Test Results"
-    condition: always()
-    inputs:
-      targetPath: "$(Build.SourcesDirectory)/test-results"
-      artifact: "TestResults"
+# Publish Test Results
+- task: PublishPipelineArtifact@1
+  displayName: "Publish Test Results"
+  condition: always()
+  inputs:
+    targetPath: "$(Build.SourcesDirectory)/test-results"
+    artifact: "TestResults"
 
-  # Final cleanup
-  - script: |
-      docker compose down --rmi all --volumes --remove-orphans || true
-      docker system prune -af --volumes || true
-    displayName: "Final Cleanup"
-    condition: always()
+# Final cleanup
+- script: |
+    docker compose -f $(Build.SourcesDirectory)/docker-compose.yml down --rmi all --volumes --remove-orphans || true
+    docker system prune -af --volumes || true
+  displayName: "Final Cleanup"
+  condition: always()
