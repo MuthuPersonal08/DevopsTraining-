@@ -1,8 +1,8 @@
 trigger:
-- main
+  - main
 
 pool:
-  name: Media Playwright
+  name: Default
 
 variables:
   composeFile: docker-compose.yml
