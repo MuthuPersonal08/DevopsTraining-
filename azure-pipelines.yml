@@ -26,9 +26,9 @@ steps:
     displayName: "Cleanup"
 
   # Build fresh image
-  - script: |
-      docker compose build --no-cache
-    displayName: "Build Docker Image"
+  # - script: |
+  #     docker compose build --no-cache
+  #   displayName: "Build Docker Image"
 
   # Start the container
   - script: |
