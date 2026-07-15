@@ -36,11 +36,11 @@ steps:
 #---------------------------------------------------------
 # Build Fresh Docker Image
 #---------------------------------------------------------
-- task: CmdLine@2
-  displayName: 'Build Docker Image'
-  inputs:
-    script: |
-      docker compose -f $(composeFile) build --no-cache
+# - task: CmdLine@2
+#   displayName: 'Build Docker Image'
+#   inputs:
+#     script: |
+#       docker compose -f $(composeFile) build --no-cache
 
 #---------------------------------------------------------
 # Start Playwright Container
