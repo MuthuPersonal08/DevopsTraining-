@@ -1,40 +1,71 @@
-trigger: none
+trigger:
+  - main
 
 pool:
-  name: Remote
+  name: Media Playwright
 
 steps:
-- powershell: |
-    Write-Host "========== Azure DevOps Agent Validation =========="
 
-    Write-Host ""
-    Write-Host "Computer Name:"
-    hostname
+  # Clean previous Docker resources
+  - script: |
+      echo "Stopping and removing old containers..."
+      docker compose down --rmi all --volumes --remove-orphans || true
 
-    Write-Host ""
-    Write-Host "Current User:"
-    whoami
+      echo "Removing old Playwright image..."
+      docker rmi -f playwright-tests || true
 
-    Write-Host ""
-    Write-Host "Current Date:"
-    Get-Date
+      echo "Cleaning Docker..."
+      docker system prune -af --volumes || true
 
-    Write-Host ""
-    Write-Host "Current Directory:"
-    Get-Location
+      echo "Cleaning old reports..."
+      rm -rf playwright-report
+      rm -rf test-results
 
-    Write-Host ""
-    Write-Host "Checking Windows Event Log Service..."
-    Get-Service EventLog
+      mkdir -p playwright-report
+      mkdir -p test-results
+    displayName: "Cleanup"
 
-    Write-Host ""
-    Write-Host "Checking Print Spooler Service..."
-    Get-Service Spooler
+  # Build fresh image
+  - script: |
+      docker compose build --no-cache
+    displayName: "Build Docker Image"
 
-    Write-Host ""
-    Write-Host "Checking Windows Management Service..."
-    Get-Service Winmgmt
+  # Start the container
+  - script: |
+      docker compose up -d
+    displayName: "Run Playwright Container"
 
-    Write-Host ""
-    Write-Host "Validation completed successfully."
-  displayName: "Validate Self-Hosted Agent"
+  # Wait until the container exits (Playwright finishes)
+  - script: |
+      docker wait playwright-container
+    displayName: "Wait for Tests"
+    condition: always()
+
+  # Show logs
+  - script: |
+      docker logs playwright-container
+    displayName: "Container Logs"
+    condition: always()
+
+  # Publish the Playwright report
+  - task: PublishPipelineArtifact@1
+    displayName: "Publish Playwright Report"
+    condition: always()
+    inputs:
+      targetPath: "$(Build.SourcesDirectory)/playwright-report"
+      artifact: "PlaywrightReport"
+
+  # Publish test results folder
+  - task: PublishPipelineArtifact@1
+    displayName: "Publish Test Results"
+    condition: always()
+    inputs:
+      targetPath: "$(Build.SourcesDirectory)/test-results"
+      artifact: "TestResults"
+
+  # Final cleanup
+  - script: |
+      docker compose down --rmi all --volumes --remove-orphans || true
+      docker system prune -af --volumes || true
+    displayName: "Final Cleanup"
+    condition: always()
